@@ -7,7 +7,7 @@
   "version": "0.0.8",
   "description": "A business CRM/ERP database based on OzmaDB.",
   "license": "Apache-2.0",
-  "packageManager": "yarn@3.x",
+  "packageManager": "yarn@4.9.4",
   "scripts": {
     "serve:lite": "vue-cli-service serve --mode development --skip-plugins @vue/cli-plugin-eslint,@ascendancyy/vue-cli-plugin-stylelint",
     "serve": "vue-cli-service serve --mode development",
