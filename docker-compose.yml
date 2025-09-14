@@ -80,7 +80,10 @@ services:
       - keycloak
 
   ozma:
-    image: ozmaio/ozma:master
+    # image: ozmaio/ozma:master
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.ozma-localbuild
     restart: unless-stopped
     volumes:
       - caddy_data:/data
@@ -89,14 +92,23 @@ services:
       KEYCLOAK_HOST: keycloak
       OZMA_DB_HOST: ozmadb
       OZMA_REPORT_GENERATOR_HOST: ozma-report-generator
+      TRUSTED_PROXIES: ${DOCKER_SUBNET_GATEWAY}
     ports:
       - ${HTTP_PORT:-9080}:80
-      - ${HTTPS_PORT:-9443}:443
+        #- ${HTTPS_PORT:-9443}:443
     depends_on:
       - keycloak
       - ozmadb
       - ozma-report-generator
 
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET_IP}
+          gateway: ${DOCKER_SUBNET_GATEWAY}
+        
 volumes:
   postgres_data:
   caddy_data:

@@ -7,6 +7,7 @@
   "version": "0.0.8",
   "description": "A business CRM/ERP database based on OzmaDB.",
   "license": "Apache-2.0",
+  "packageManager": "yarn@3.x",
   "scripts": {
     "serve:lite": "vue-cli-service serve --mode development --skip-plugins @vue/cli-plugin-eslint,@ascendancyy/vue-cli-plugin-stylelint",
     "serve": "vue-cli-service serve --mode development",
@@ -59,7 +60,7 @@
     "vue-unique-id": "^3.0.0",
     "vue-wrapped-component": "^1.0.0",
     "vuedraggable": "^2.23.2",
-    "vuex": "patch:vuex@npm%3A3.6.2#~/.yarn/patches/vuex-npm-3.6.2-82badaae22.patch",
+    "vuex": "patch:vuex@npm%3A3.6.2#./.yarn/patches/vuex-npm-3.6.2-82badaae22.patch",
     "vuex-class": "^0.3.2",
     "zod": "^3.19.1"
   },

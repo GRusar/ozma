@@ -1878,7 +1878,7 @@ __metadata:
     vue-unique-id: "npm:^3.0.0"
     vue-wrapped-component: "npm:^1.0.0"
     vuedraggable: "npm:^2.23.2"
-    vuex: "patch:vuex@npm%3A3.6.2#~/.yarn/patches/vuex-npm-3.6.2-82badaae22.patch"
+    vuex: "patch:vuex@npm%3A3.6.2#./.yarn/patches/vuex-npm-3.6.2-82badaae22.patch"
     vuex-class: "npm:^0.3.2"
     webpack: "npm:^5.94.0"
     webpack-bundle-analyzer: "npm:^4.6.1"
@@ -11968,9 +11968,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vuex@patch:vuex@npm%3A3.6.2#~/.yarn/patches/vuex-npm-3.6.2-82badaae22.patch":
+"vuex@patch:vuex@npm%3A3.6.2#./.yarn/patches/vuex-npm-3.6.2-82badaae22.patch::locator=%40ozma-io%2Fozma%40workspace%3A.":
   version: 3.6.2
-  resolution: "vuex@patch:vuex@npm%3A3.6.2#~/.yarn/patches/vuex-npm-3.6.2-82badaae22.patch::version=3.6.2&hash=5fac1b"
+  resolution: "vuex@patch:vuex@npm%3A3.6.2#./.yarn/patches/vuex-npm-3.6.2-82badaae22.patch::version=3.6.2&hash=5fac1b&locator=%40ozma-io%2Fozma%40workspace%3A."
   peerDependencies:
     vue: ^2.0.0
   checksum: 10c0/fe85bad555d0aab652a801ee8b4c078d3b7d1f9ea35ad07aa952aa9901badee31bd172d3c08ad0ce49c054a741f0c46082f76d8fb3934810eebf81e1a4a4421a
