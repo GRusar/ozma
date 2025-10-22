@@ -134,3 +134,4 @@ dist
 
 # Docker override files
 docker-compose.override*
+!docker-compose*.example

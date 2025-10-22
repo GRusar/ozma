@@ -3,6 +3,9 @@ WORKDIR /app
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY .yarn ./.yarn
 RUN corepack enable && yarn install
+
+RUN npx update-browserslist-db@latest --update-db
+
 COPY . .
 RUN yarn build
 
