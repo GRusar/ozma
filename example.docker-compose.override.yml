@@ -1,0 +1,19 @@
+services:
+  ozma:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.ozma-localbuild
+    volumes:
+      - ./docker/Caddyfile.ozma:/etc/caddy/Caddyfile:ro
+    environment:
+      TRUSTED_PROXIES: ${DOCKER_SUBNET_GATEWAY}
+    ports: !override
+       - ${HTTP_PORT:-9080}:80
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET_IP}
+          gateway: ${DOCKER_SUBNET_GATEWAY}
