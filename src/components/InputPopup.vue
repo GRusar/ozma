@@ -32,14 +32,14 @@
       <popper
         ref="popup"
         trigger="clickToToggle"
-        transition="fade"
-        enter-active-class="fade-enter fade-enter-active"
-        leave-active-class="fade-leave fade-leave-active"
+        transition="ozma-popover"
+        enter-active-class="ozma-popover-enter-active"
+        leave-active-class="ozma-popover-leave-active"
         :visible-arrow="false"
         :options="popperOptions"
         :disabled="!show"
         :force-show="show"
-        @documentClick="onDocumentClick"
+        @document-click="onDocumentClick"
       >
         <!-- eslint-disable vue/no-deprecated-slot-attribute -->
         <!-- TODO: Find or make not deprecated popper.js wrapper -->
@@ -62,10 +62,10 @@
 </template>
 
 <script lang="ts">
-import Popper from 'vue-popperjs'
 import { Portal } from 'portal-vue'
 import { Component, Vue, Prop, Watch } from 'vue-property-decorator'
 
+import Popper from '@/components/common/OzmaPopper.vue'
 import TabbedModal from '@/components/modal/TabbedModal.vue'
 import { nextRender } from '@/utils'
 import { UserString, isOptionalUserString } from '@/state/translations'
@@ -143,6 +143,7 @@ export default class InputPopup extends Vue {
 .popup {
   display: flex;
   flex-direction: column;
+  z-index: 1002;
   box-shadow: 0px 3px 12px 0px rgba(0, 0, 0, 0.08);
   border: 1px solid #efefef;
   border-radius: 0.5rem;
@@ -150,13 +151,13 @@ export default class InputPopup extends Vue {
   max-width: 98%;
   height: 19rem;
   max-height: 80vh;
-  overflow: auto;
   resize: both;
   font-size: 1rem;
 
   .popup-inner-slot {
     flex: 1 1;
     height: 100%;
+    overflow: auto;
   }
 }
 

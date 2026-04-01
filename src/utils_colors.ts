@@ -6,7 +6,7 @@ import FunDBAPI, {
   RowId,
 } from '@ozma-io/ozmadb-js/client'
 import { store } from '@/main'
-import { mapMaybe, objectMap } from '@/utils'
+import { mapMaybe, objectMap, safeJsonParse } from '@/utils'
 
 const ThemeRef = z.object({
   schema: z.string(),
@@ -32,7 +32,7 @@ export type Rgba = [r: number, g: number, b: number, a: number]
 export type Hsla = [h: number, s: number, l: number, a: number]
 export type Color = string
 
-export const variantKeys = [
+export const colorVariantKeys = [
   'foreground',
   'foregroundContrast',
   'foregroundDarker',
@@ -40,11 +40,24 @@ export const variantKeys = [
   'backgroundDarker1',
   'backgroundDarker2',
   'border',
+  'shadow',
 ] as const
+export type ColorVariantKey = (typeof colorVariantKeys)[number]
+export const styleVariantKeys = [
+  'fontWeight',
+  'fontStyle',
+  'textDecoration',
+] as const
+export type StyleVariantKey = (typeof styleVariantKeys)[number]
+export const variantKeys = [...colorVariantKeys, ...styleVariantKeys] as const
 export type VariantKey = (typeof variantKeys)[number]
 
 type RawColorVariant = {
   [key in VariantKey]?: unknown
+} & {
+  font_weight?: unknown
+  font_style?: unknown
+  text_decoration?: unknown
 }
 export type ColorVariant = {
   [key in VariantKey]: string
@@ -69,10 +82,16 @@ export const colorVariantFromRaw = (raw: RawColorVariant): ColorVariant => {
   const foreground =
     toRgbaOrNull(raw.foreground) ?? darkenOrLighten(background, 0.8)
   const border = toRgbaOrNull(raw.border) ?? mix(background, 'black', 0.06)
+  const shadow = toRgbaOrNull(raw.shadow) ?? rgba(15, 23, 42, 0.45)
   const backgroundDarker1 = mix(background, foreground, 0.05)
   const backgroundDarker2 = mix(background, foreground, 0.15)
   const foregroundContrast = readableColor(background)
   const foregroundDarker = mix(foreground, background, 0.5)
+  const fontWeight = String(raw.fontWeight ?? raw.font_weight ?? 'normal')
+  const fontStyle = String(raw.fontStyle ?? raw.font_style ?? 'normal')
+  const textDecoration = String(
+    raw.textDecoration ?? raw.text_decoration ?? 'none',
+  )
   return {
     foreground,
     foregroundContrast,
@@ -81,6 +100,10 @@ export const colorVariantFromRaw = (raw: RawColorVariant): ColorVariant => {
     backgroundDarker1,
     backgroundDarker2,
     border,
+    shadow,
+    fontWeight,
+    fontStyle,
+    textDecoration,
   }
 }
 
@@ -281,18 +304,20 @@ export const loadThemes = async (): Promise<ThemesMap> => {
 
 const colorVariantPropToCssVariableEntry = (
   variantKey: VariantKey,
-  color: string,
+  value: string,
 ): [ColorVariantCssVariableName, string] => [
-  `--${variantKey}Color` as const,
-  color,
+  (colorVariantKeys.includes(variantKey as ColorVariantKey)
+    ? `--${variantKey}Color`
+    : `--${variantKey}Style`) as ColorVariantCssVariableName,
+  value,
 ]
 
 const colorVariantPropToCssVariable = (
   variantKey: VariantKey,
-  color: string,
+  value: string,
 ) => {
-  const [name, _] = colorVariantPropToCssVariableEntry(variantKey, color)
-  return `${name}: ${color};`
+  const [name, _] = colorVariantPropToCssVariableEntry(variantKey, value)
+  return `${name}: ${value};`
 }
 
 export const colorVariantToCssVariables = (
@@ -326,6 +351,37 @@ export const colorVariantFromAttribute = (
         }
       : defaultVariant
 
+// For `cell_color`: if the string is a valid CSS color, treat it as a background color (inline).
+// Otherwise treat it as a palette variant class name (same as `option_variant`).
+export const colorVariantFromCellColor = (
+  cellColor: string,
+): ColorVariantAttribute =>
+  cellColor === 'table_color'
+    ? {
+        type: 'inline',
+        variables: {
+          '--foregroundColor': 'var(--table-foregroundColor)',
+          '--foregroundContrastColor': 'var(--table-foregroundContrastColor)',
+          '--foregroundDarkerColor': 'var(--table-foregroundDarkerColor)',
+          '--backgroundColor': 'var(--table-backgroundColor)',
+          '--backgroundDarker1Color': 'var(--table-backgroundDarker1Color)',
+          '--backgroundDarker2Color': 'var(--table-backgroundDarker2Color)',
+          '--borderColor': 'var(--table-borderColor)',
+          '--shadowColor': 'var(--table-shadowColor)',
+          '--fontWeightStyle': 'var(--table-fontWeightStyle, normal)',
+          '--fontStyleStyle': 'var(--table-fontStyleStyle, normal)',
+          '--textDecorationStyle': 'var(--table-textDecorationStyle, none)',
+        },
+      }
+    : toRgbaOrNull(cellColor) !== null
+      ? {
+          type: 'inline',
+          variables: colorVariantToCssVariables(
+            colorVariantFromRaw({ background: cellColor }),
+          ),
+        }
+      : { type: 'existing', className: cellColor }
+
 export const getColorVariantAttributeClassName = (
   attribute: ColorVariantAttribute,
 ): ColorVariantFullClassName | null =>
@@ -338,10 +394,16 @@ export const getColorVariantAttributeVariables = (
 ): ColorVariantCssVariables | null =>
   attribute?.type === 'inline' ? attribute.variables : null
 
+const globalVariantPrefix = 'global-'
+
 const colorVariantToCssRule = (
   variantName: string,
   variant: ColorVariant,
 ): string => {
+  if (variantName.startsWith(globalVariantPrefix)) {
+    const cssVarName = `--${variantName.slice(globalVariantPrefix.length)}`
+    return `:root {\n${cssVarName}: ${variant.background};\n}`
+  }
   const variables = (Object.entries(variant) as [VariantKey, string][])
     .map(([variantKey, value]) =>
       colorVariantPropToCssVariable(variantKey, value),
@@ -364,21 +426,17 @@ export const getPreferredTheme = (
   themes: ThemesMap,
   defaultSchema?: SchemaName,
 ): IThemeRef | null => {
-  // FIXME: use prefers-color-scheme for user browser dark theme when we will fix all dark theme design issues
-  // const prefersDarkTheme = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const prefersDarkTheme = false
-
-  /*
-  const storedTheme = ThemeRef.safeParse(safeJsonParse(localStorage.getItem("preferredTheme")));
+  const storedTheme = ThemeRef.safeParse(
+    safeJsonParse(localStorage.getItem('preferredTheme')),
+  )
 
   if (storedTheme.success) {
-    const themesSchema = themes[storedTheme.data.schema];
+    const themesSchema = themes[storedTheme.data.schema]
     if (themesSchema !== undefined && storedTheme.data.name in themesSchema) {
-      return storedTheme.data;
+      return storedTheme.data
     }
-    console.error(`User theme ${storedTheme.data.schema}.${storedTheme.data.name} is not defined`);
+    console.error(`User theme ${storedTheme.data.schema}.${storedTheme.data.name} is not defined`)
   }
-  */
 
   const myDefaultSchema = defaultSchema ?? 'user'
 
@@ -398,17 +456,19 @@ export const getPreferredTheme = (
     }
   }
 
-  if (prefersDarkTheme) {
-    const darkScheme = tryFindTheme('dark')
-    if (darkScheme) {
-      return darkScheme
-    }
-  }
-
-  return tryFindTheme('light')
+  // Keep light as the default for users without an explicit preference.
+  return (
+    tryFindTheme('light') ??
+    tryFindTheme('light-glass') ??
+    tryFindTheme('dark') ??
+    tryFindTheme('dark-glass') ??
+    null
+  )
 }
 
-export type ColorVariantCssVariableName = `--${VariantKey}Color`
+export type ColorVariantCssVariableName =
+  | `--${ColorVariantKey}Color`
+  | `--${StyleVariantKey}Style`
 export type ColorVariantCssVariables = Record<
   ColorVariantCssVariableName,
   string

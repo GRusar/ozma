@@ -35,6 +35,7 @@
     :class="[
       'view-form',
       { 'contains-only-one-iframe': containsOnlyOneIframe },
+      { 'animations-disabled': !uiAnimationsEnabled },
     ]"
   >
     <Errorbox
@@ -192,7 +193,7 @@ import {
 import {
   GridElement,
   IGridInput,
-  IGridSection,
+  IGridSubBlock,
 } from '@/components/form/FormGrid.vue'
 import type { Button } from '@/components/buttons/buttons'
 import ButtonItem from '@/components/buttons/ButtonItem.vue'
@@ -672,15 +673,25 @@ export default class UserViewForm extends mixins<
 
   get gridBlocks(): FormGridElement[] {
     const viewAttrs = this.uv.attributes
-    const blocks: IGridSection<FormElement>[] = (this.blockSizes ?? [12]).map(
-      (size) => ({
-        type: 'section',
-        size,
-        content: [],
-        singleUserViewSection: false,
-        hasNoContent: true,
-      }),
-    )
+
+    // Intermediate structure to collect elements per block, with sub-block info
+    interface BlockCollector {
+      size: number
+      elements: {
+        element: IGridInput<FormElement>
+        subBlock?: number
+        isUserView: boolean
+      }[]
+      hasSubBlocks: boolean
+    }
+
+    const blockSizes = this.blockSizes ?? [12]
+    const collectors: BlockCollector[] = blockSizes.map((size) => ({
+      size,
+      elements: [],
+      hasSubBlocks: false,
+    }))
+
     // If 'block_sizes' attribute is not used or invalid,
     // then two-column layout is used.
     const inputWidth = this.blockSizes === null ? 6 : 12
@@ -700,7 +711,18 @@ export default class UserViewForm extends mixins<
 
       const blockAttr = Number(getColumnAttr('form_block'))
       const blockNumber = Number.isNaN(blockAttr) ? 0 : blockAttr
-      const block = Math.max(0, Math.min(blockNumber, blocks.length - 1))
+      const block = Math.max(0, Math.min(blockNumber, collectors.length - 1))
+
+      const subBlockAttr = getColumnAttr('form_sub_block')
+      const subBlockNumber = subBlockAttr !== undefined && subBlockAttr !== null
+        ? Number(subBlockAttr)
+        : undefined
+      const subBlock = subBlockNumber !== undefined && !Number.isNaN(subBlockNumber)
+        ? subBlockNumber
+        : undefined
+      if (subBlock !== undefined) {
+        collectors[block].hasSubBlocks = true
+      }
 
       const captionAttr = rawToUserString(getColumnAttr('caption'))
       const caption = captionAttr ?? columnInfo.name
@@ -719,21 +741,10 @@ export default class UserViewForm extends mixins<
           autofocus,
         },
       }
-      blocks[block].content.push(element)
-
-      if (blocks[block].content.length === 1 && isUserView) {
-        blocks[block].singleUserViewSection = true
-      } else {
-        blocks[block].singleUserViewSection = false
-      }
-
-      if (blocks[block].content.length === 0) {
-        blocks[block].hasNoContent = true
-      } else {
-        blocks[block].hasNoContent = false
-      }
+      collectors[block].elements.push({ element, subBlock, isUserView })
     })
 
+    // Handle deprecated form_buttons
     const formButtons = this.uv.attributes['form_buttons']
     if (formButtons !== undefined && Array.isArray(formButtons)) {
       console.warn(
@@ -743,7 +754,7 @@ export default class UserViewForm extends mixins<
       formButtons.forEach((buttons, i) => {
         const blockAttr = Number(buttons['form_block'])
         const blockNumber = Number.isNaN(blockAttr) ? 0 : blockAttr
-        const block = Math.max(0, Math.min(blockNumber, blocks.length - 1))
+        const block = Math.max(0, Math.min(blockNumber, collectors.length - 1))
 
         const actions: IButtonAction[] = []
         if (Array.isArray(buttons['actions'])) {
@@ -772,11 +783,97 @@ export default class UserViewForm extends mixins<
               actions,
             },
           }
-          blocks[block].content.push(element)
+          collectors[block].elements.push({ element, isUserView: false })
         }
       })
     }
-    return blocks
+
+    // Parse sub_block_titles: { "0": { "0": "Title", "1": "Title2" }, ... }
+    const subBlockTitlesAttr = viewAttrs['sub_block_titles']
+    const getSubBlockTitle = (blockIdx: number, subBlockIdx: number): string | undefined => {
+      if (subBlockTitlesAttr && typeof subBlockTitlesAttr === 'object') {
+        const blockTitles = (subBlockTitlesAttr as Record<string, any>)[String(blockIdx)]
+        if (blockTitles && typeof blockTitles === 'object') {
+          const title = (blockTitles as Record<string, any>)[String(subBlockIdx)]
+          return typeof title === 'string' ? title : undefined
+        }
+      }
+      return undefined
+    }
+
+    // Parse sub_block_colors: { "0": { "0": "#e74c3c", "1": "#3498db" }, ... }
+    const subBlockColorsAttr = viewAttrs['sub_block_colors']
+    const getSubBlockColor = (blockIdx: number, subBlockIdx: number): string | undefined => {
+      if (subBlockColorsAttr && typeof subBlockColorsAttr === 'object') {
+        const blockColors = (subBlockColorsAttr as Record<string, any>)[String(blockIdx)]
+        if (blockColors && typeof blockColors === 'object') {
+          const color = (blockColors as Record<string, any>)[String(subBlockIdx)]
+          return typeof color === 'string' ? color : undefined
+        }
+      }
+      return undefined
+    }
+
+    // Build final grid blocks
+    const result: FormGridElement[] = collectors.map((collector, blockIdx) => {
+      if (!collector.hasSubBlocks || !this.formSubBlocksEnabled) {
+        // Legacy path: this block has no sub-blocks (or setting is off), return a plain section
+        const content = collector.elements.map((e) => e.element)
+        const singleUserViewSection =
+          content.length === 1 && collector.elements[0]?.isUserView
+        return {
+          type: 'section' as const,
+          size: collector.size,
+          content,
+          singleUserViewSection,
+          hasNoContent: content.length === 0,
+        }
+      }
+
+      // Sub-block path: process elements in sequential order to preserve visual positions.
+      // Consecutive elements sharing the same form_sub_block key are grouped into one subBlock.
+      // Elements without form_sub_block (key = -1) form their own inline subBlock at their position.
+      const subBlocks: IGridSubBlock<FormElement>[] = []
+      let currentKey = -2 // sentinel: no active group
+      let currentElements: IGridInput<FormElement>[] = []
+      let currentTitle: string | undefined
+
+      for (const entry of collector.elements) {
+        const key = entry.subBlock ?? -1
+        if (key !== currentKey) {
+          if (currentElements.length > 0) {
+            subBlocks.push({
+              hasCard: currentKey >= 0,
+              title: currentKey >= 0 ? currentTitle : undefined,
+              color: currentKey >= 0 ? getSubBlockColor(blockIdx, currentKey) : undefined,
+              content: currentElements,
+            })
+          }
+          currentKey = key
+          currentElements = []
+          currentTitle = key >= 0 ? getSubBlockTitle(blockIdx, key) : undefined
+        }
+        currentElements.push(entry.element)
+      }
+      if (currentElements.length > 0) {
+        subBlocks.push({
+          hasCard: currentKey >= 0,
+          title: currentKey >= 0 ? currentTitle : undefined,
+          color: currentKey >= 0 ? getSubBlockColor(blockIdx, currentKey) : undefined,
+          content: currentElements,
+        })
+      }
+
+      const totalElements = collector.elements.length
+      return {
+        type: 'section_with_sub_blocks' as const,
+        size: collector.size,
+        subBlocks,
+        hasNoContent: totalElements === 0,
+      }
+    })
+
+    return result
   }
 
   private async init() {
@@ -967,6 +1064,22 @@ export default class UserViewForm extends mixins<
       this.uv.columnAttributes[0].control === 'iframe'
     )
   }
+
+  private get uiAnimationsEnabled(): boolean {
+    return this.$store.state.settings.current.getEntry(
+      'ui_animations_enabled',
+      Boolean,
+      true,
+    )
+  }
+
+  private get formSubBlocksEnabled(): boolean {
+    return this.$store.state.settings.current.getEntry(
+      'form_sub_blocks',
+      Boolean,
+      false,
+    )
+  }
 }
 </script>
 
@@ -978,6 +1091,8 @@ export default class UserViewForm extends mixins<
   overflow-x: hidden;
   overflow-y: auto;
   color: var(--form-foregroundColor);
+  animation: form-screen-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center top;
 
   @include mobile {
     padding: 1rem !important;
@@ -985,10 +1100,62 @@ export default class UserViewForm extends mixins<
 
   &.contains-only-one-iframe {
     padding: 0 !important;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
 
-    ::v-deep .first_level_grid_block {
+    ::v-deep .first_level_grid_block,
+    ::v-deep .first_level_grid_block > .row,
+    ::v-deep .first_level_grid_block > .row > .col,
+    ::v-deep .first_level_grid_block > .row > [class*="col-"],
+    ::v-deep .element-block,
+    ::v-deep .element-block > div,
+    ::v-deep .element-block > div > span,
+    ::v-deep .element-block > div > span > div,
+    ::v-deep .row-override,
+    ::v-deep .input_container,
+    ::v-deep .input-slot,
+    ::v-deep .iframe-container {
+      height: 100%;
       margin-bottom: 0 !important;
     }
+
+    ::v-deep .border-label {
+      display: none;
+    }
+
+    ::v-deep .container-fluid,
+    ::v-deep .form_container,
+    ::v-deep .form-entry,
+    ::v-deep .no-gutters,
+    ::v-deep .no-gutters > .col,
+    ::v-deep .form_container > .row,
+    ::v-deep .form_container > .row > [class*="col-"] {
+      height: 100%;
+    }
+  }
+}
+
+.view-form.animations-disabled {
+  animation: none !important;
+}
+
+@keyframes form-screen-enter {
+  from {
+    transform: translateY(0.75rem);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-form {
+    animation: none;
   }
 }
 

@@ -84,7 +84,7 @@
 -->
 
 <template>
-  <div class="userview-wrapper">
+  <div :class="['userview-wrapper', { 'iframe-only-wrapper': isFormWithOnlyIframe }]">
     <b-modal
       :id="$id('business_mode_edit_view')"
       lazy
@@ -175,6 +175,7 @@
             @select="$emit('select', $event)"
             @update:buttons="componentButtons = $event"
             @update:enable-filter="$emit('update:enable-filter', $event)"
+            @update:sort-editor-props="$emit('update:sort-editor-props', $event)"
             @update:current-page="$emit('update:current-page', $event)"
             @update:body-style="$emit('update:body-style', $event)"
             @load-next-chunk="loadNextChunk"
@@ -480,6 +481,18 @@ export default class UserView extends Vue {
       : 'none'
   }
 
+  get isFormWithOnlyIframe(): boolean {
+    if (this.state.state !== 'show') return false
+    const uv = this.state.uv
+    if (
+      this.state.componentName !== 'Form' ||
+      uv.columnAttributes.length !== 1 ||
+      uv.columnAttributes[0]['control'] !== 'iframe'
+    ) return false
+    const height = uv.columnAttributes[0]['control_height']
+    return height !== undefined && String(height).endsWith('%')
+  }
+
   get showImportInitialInstance() {
     return (
       this.isTopLevel &&
@@ -661,6 +674,7 @@ export default class UserView extends Vue {
   private watchState() {
     if (this.state.state !== 'show') {
       this.$emit('update:argument-editor-props', null)
+      this.$emit('update:sort-editor-props', null)
       return
     }
 
@@ -1084,6 +1098,11 @@ export default class UserView extends Vue {
     this.$emit('update:is-loading', newValue === 'loading')
   }
 
+  @Watch('isFormWithOnlyIframe', { immediate: true })
+  updateIframeOnly(newValue: boolean) {
+    this.$emit('update:iframe-only', newValue)
+  }
+
   // FIXME: Do not changed when modal is open — only default values
   // for title and description.
 
@@ -1187,6 +1206,15 @@ export default class UserView extends Vue {
   background-color: var(--userview-background-color);
   height: 100%;
   overflow-y: auto;
+
+  &.iframe-only-wrapper {
+    overflow: hidden;
+
+    .b-overlay-wrap,
+    .userview-overlay {
+      height: 100%;
+    }
+  }
 }
 
 .overlay-content {

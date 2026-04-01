@@ -29,6 +29,9 @@
       v-if="button"
       ref="popup"
       trigger="clickToOpen"
+      transition="ozma-popover"
+      enter-active-class="ozma-popover-enter-active"
+      leave-active-class="ozma-popover-leave-active"
       :visible-arrow="false"
       :options="{
         placement: 'bottom-end',
@@ -45,7 +48,7 @@
       }"
       :disabled="!visible"
       :force-show="visible"
-      @documentClick="visible = false"
+      @document-click="onPopupDocumentClick"
     >
       <div class="popper shadow">
         <div
@@ -93,7 +96,6 @@
 
 <script lang="ts">
 import { Vue, Component, Prop, Watch } from 'vue-property-decorator'
-import Popper from 'vue-popperjs'
 import { Debounce } from 'vue-debounce-decorator'
 import { namespace } from 'vuex-class'
 
@@ -103,6 +105,7 @@ import {
   FieldType,
   ValueType,
 } from '@ozma-io/ozmadb-js/client'
+import Popper from '@/components/common/OzmaPopper.vue'
 import { deserializeValueFunction, fieldToValueType } from '@/values'
 import FormControl from '@/components/FormControl.vue'
 import type {
@@ -148,6 +151,25 @@ export default class ArgumentEditor extends Vue {
 
   private visible = false
   private updatedArguments: Record<ArgumentName, unknown> = {}
+
+  private onPopupDocumentClick(_popup: unknown, event?: MouseEvent) {
+    if (this.isClickInsideCalendar(event)) {
+      return
+    }
+
+    this.visible = false
+  }
+
+  private isClickInsideCalendar(event?: MouseEvent): boolean {
+    const target = event?.target
+    if (!(target instanceof Node)) {
+      return false
+    }
+
+    return Array.from(document.querySelectorAll('.calendar-popper')).some((el) =>
+      el.contains(target),
+    )
+  }
 
   @Watch('userView')
   propsChanged() {
@@ -217,7 +239,7 @@ export default class ArgumentEditor extends Vue {
         // TODO: Add 'expand' icon on the right to match design from Figma.
         type: 'callback',
         variant: outlinedInterfaceButtonVariant,
-        icon: 'filter_list',
+        icon: 'tune',
         caption: this.$t('filters').toString(),
         tooltip: '',
         callback: () => {

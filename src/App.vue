@@ -16,6 +16,7 @@
   <div
     id="app"
     :data-window="uid"
+    :data-theme-style="themeStyleName"
     :style="styleSettings"
     class="default-variant default-local-variant"
   >
@@ -280,6 +281,34 @@ export default class App extends Vue {
     void this.getTranslations(language)
   }
 
+  get themeStyleName(): string {
+    return this.currentThemeRef?.name ?? 'default'
+  }
+
+  @Watch('themeStyleName', { immediate: true })
+  private syncThemeStyleName(themeStyleName: string) {
+    document.documentElement.setAttribute('data-theme-style', themeStyleName)
+    document.body?.setAttribute('data-theme-style', themeStyleName)
+    document.documentElement.classList.add(
+      'default-variant',
+      'default-local-variant',
+    )
+    document.body?.classList.add('default-variant', 'default-local-variant')
+  }
+
+  @Watch('styleSettings', { immediate: true, deep: true })
+  private syncGlobalStyleSettings(styleSettings: Record<string, unknown>) {
+    const applyVars = (element: HTMLElement | null) => {
+      if (!element) return
+      for (const [name, value] of Object.entries(styleSettings)) {
+        element.style.setProperty(name, String(value))
+      }
+    }
+
+    applyVars(document.documentElement)
+    applyVars(document.body)
+  }
+
   @Watch('settings', { immediate: true })
   private updateSettings() {
     const rawAutoSaveTimeout = Number(
@@ -357,21 +386,28 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     const oldDefaultVariant = colorVariantFromRaw({ background })
     const defaultVariant =
       currentTheme?.colorVariants['default'] ?? oldDefaultVariant
+    const pageBackgroundVariant =
+      currentTheme?.colorVariants['pageBackground'] ??
+      colorVariantFromRaw({ background: defaultVariant.backgroundDarker1 })
+    const existingTableVariant =
+      currentTheme?.colorVariants['table'] ??
+      currentTheme?.colorVariants['table-background']
+    const tableVariant =
+      existingTableVariant ??
+      colorVariantFromRaw({ background: defaultVariant.background })
     const interfaceButton = {
       ...transparentVariant,
-      backgroundDarker1: 'rgba(0, 0, 0, 0.2)',
-      backgroundDarker2: 'rgba(0, 0, 0, 0.4)',
+      backgroundDarker1: defaultVariant.backgroundDarker1,
+      backgroundDarker2: defaultVariant.backgroundDarker2,
       foreground: defaultVariant.foreground,
       foregroundContrast: defaultVariant.foregroundContrast,
       foregroundDarker: defaultVariant.foregroundDarker,
     }
     const menuEntry = {
       ...interfaceButton,
-      foreground: '#3D3D3D',
     }
     const menuHeader = {
       ...interfaceButton,
-      foreground: '#1F1F1F',
     }
     const outlinedInterfaceButton = {
       ...interfaceButton,
@@ -384,6 +420,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     })
     const defaultColorVariants = {
       default: defaultVariant,
+      'global-userview-background': pageBackgroundVariant,
+      table: tableVariant,
       interfaceButton,
       outlinedInterfaceButton,
       menuEntry,
@@ -564,6 +602,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     var(--OldMainBackgroundColor)
   ) !important;
   --MainBorderColor: var(--borderColor, var(--OldMainBorderColor)) !important;
+
+  --userview-background-color: var(--userview-background, var(--default-backgroundDarker1Color, #f2f4f7));
 
   background-color: var(--backgroundColor);
   color: var(--foregroundColor);
