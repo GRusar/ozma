@@ -131,7 +131,12 @@ dist
 
 # Mac OS
 .DS_Store
+<<<<<<< HEAD
 
 # Docker override files
 docker-compose.override*
 !docker-compose*.example
+=======
+.worktrees
+deploy.env
+>>>>>>> master

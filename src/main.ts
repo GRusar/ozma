@@ -39,11 +39,22 @@ export interface IShowHelpModalArgs {
   ref: IEmbeddedPageRef
 }
 
+export interface ISelectionPanelContent {
+  label: string
+  buttons: import('@/components/buttons/buttons').Button[]
+}
+
+export interface ISelectionPanelArgs extends ISelectionPanelContent {
+  sourceId: symbol
+}
+
 type Events = {
   ['show-readonly-demo-modal']?: string
   ['show-invite-user-modal']?: string
   ['show-help-modal']: IShowHelpModalArgs
   ['close-all-toasts']?: string
+  ['show-selection-panel']: ISelectionPanelArgs
+  ['hide-selection-panel']: { sourceId: symbol }
 }
 
 export const eventBus = mitt<Events>()

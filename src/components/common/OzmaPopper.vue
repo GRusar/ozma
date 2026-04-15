@@ -498,6 +498,9 @@ export default {
             this.clearAnimatedContentStyles(element)
           })
           this.updatePopper()
+          // Re-assert z-index after updatePopper so we end up above any parent
+          // popup whose createPopper/onCreate bringToFront fired in this tick.
+          this.bringToFront()
         })
         return
       }
@@ -511,6 +514,9 @@ export default {
         const contentElements = this.getAnimatedContentElements(containerElement)
         this.prepareOpenAnimationState(containerElement, contentElements)
         this.updatePopper()
+        // Re-assert z-index after updatePopper so we end up above any parent
+        // popup whose createPopper/onCreate bringToFront fired in this tick.
+        this.bringToFront()
 
         this.animationFrame1 = requestAnimationFrame(() => {
           this.animationFrame2 = requestAnimationFrame(() => {
@@ -572,9 +578,14 @@ export default {
           this.appendArrow(this.popper)
         }
 
-        if (this.appendToBody && !this.appendedToBody) {
-          this.appendedToBody = true
-          document.body.appendChild(this.popper.parentElement)
+        if (this.appendToBody) {
+          const container = this.popper.parentElement
+          if (container && container.parentElement !== document.body) {
+            this.appendedToBody = true
+            document.body.appendChild(container)
+          } else if (container) {
+            this.appendedToBody = true
+          }
         }
 
         if (this.popperJS && this.popperJS.destroy) {
@@ -598,10 +609,7 @@ export default {
 
         this.popperOptions.onCreate = () => {
           this.$emit('created', this)
-          this.$nextTick(() => {
-            this.updatePopper()
-            this.bringToFront()
-          })
+          this.$nextTick(() => this.updatePopper())
         }
 
         this.popperJS = new Popper(this.referenceElm, this.popper, this.popperOptions)
