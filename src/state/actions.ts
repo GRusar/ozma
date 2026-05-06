@@ -40,6 +40,20 @@ export const saveAndRunAction = async (
               },
               { root: true },
             )
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const finishInfo = (ret as any)?.finishInfo as
+              | { status: string; message?: string }
+              | undefined
+            if (finishInfo) {
+              const { status, message } = finishInfo
+              const toastBody = message ?? i18n.tc(`action_finish_${status}`)
+              app.$bvToast.toast(toastBody, {
+                title: i18n.tc(`action_finish_${status}`),
+                toastClass: `finish-toast finish-toast--${status}`,
+                solid: true,
+                noAutoHide: status !== 'success',
+              })
+            }
           } catch (e) {
             if (!(e instanceof Error)) {
               throw e

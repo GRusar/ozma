@@ -2199,3 +2199,147 @@ html[data-theme-style='light-glass'] .tabbed-modal .content,
   }
 }
 
+
+/* finishWith toast — base (all themes) */
+.finish-toast {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+}
+
+.finish-toast--success {
+  background-color: #d1fae5 !important;
+  border-color: #059669 !important;
+  color: #065f46 !important;
+
+  .toast-header {
+    background-color: #a7f3d0 !important;
+    border-bottom-color: #059669 !important;
+    color: #065f46 !important;
+  }
+}
+
+.finish-toast--warning {
+  background-color: #fef3c7 !important;
+  border-color: #d97706 !important;
+  color: #78350f !important;
+
+  .toast-header {
+    background-color: #fde68a !important;
+    border-bottom-color: #d97706 !important;
+    color: #78350f !important;
+  }
+}
+
+.finish-toast--error {
+  background-color: #fee2e2 !important;
+  border-color: #dc2626 !important;
+  color: #7f1d1d !important;
+
+  .toast-header {
+    background-color: #fecaca !important;
+    border-bottom-color: #dc2626 !important;
+    color: #7f1d1d !important;
+  }
+}
+
+/* finishWith toast — liquid glass */
+html[data-theme-style='light-glass'] {
+  --status-error: #dc2626;
+  --finish-toast-success-rgb: 15, 118, 110;
+  --finish-toast-warning-rgb: 196, 145, 20;
+  --finish-toast-error-rgb: 220, 38, 38;
+}
+
+html[data-theme-style='dark-glass'] {
+  --status-error: #f87171;
+  --finish-toast-success-rgb: 79, 214, 190;
+  --finish-toast-warning-rgb: 246, 185, 65;
+  --finish-toast-error-rgb: 248, 113, 113;
+}
+
+html[data-theme-style='light-glass'],
+html[data-theme-style='dark-glass'] {
+  /* Base glass structure — shared by all statuses.
+     will-change: transform promotes the toast to its own GPU compositing layer,
+     decoupling its repaint from the animated blobs inside #app. */
+  .finish-toast {
+    backdrop-filter: blur(24px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+    will-change: transform !important;
+    transform: translateZ(0) !important;
+    border-radius: 18px !important;
+    overflow: hidden !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+  }
+
+  .finish-toast .toast-header {
+    border-bottom-width: 1px !important;
+    border-bottom-style: solid !important;
+    /* Specular highlight on the header top edge */
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.00) 100%
+    ) !important;
+  }
+
+  /* ── Success ── */
+  .finish-toast--success {
+    background-color: rgba(var(--finish-toast-success-rgb), 0.28) !important;
+    border-color: rgba(var(--finish-toast-success-rgb), 0.45) !important;
+    color: var(--accent) !important;
+    box-shadow:
+      0 8px 32px rgba(var(--finish-toast-success-rgb), 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
+
+    .toast-header {
+      background-color: rgba(var(--finish-toast-success-rgb), 0.42) !important;
+      border-bottom-color: rgba(var(--finish-toast-success-rgb), 0.35) !important;
+      color: var(--accent) !important;
+    }
+
+    .close { color: var(--accent) !important; opacity: 0.7; }
+    .close:hover { opacity: 1; }
+  }
+
+  /* ── Warning ── */
+  .finish-toast--warning {
+    background-color: rgba(var(--finish-toast-warning-rgb), 0.28) !important;
+    border-color: rgba(var(--finish-toast-warning-rgb), 0.45) !important;
+    color: var(--accent-2) !important;
+    box-shadow:
+      0 8px 32px rgba(var(--finish-toast-warning-rgb), 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
+
+    .toast-header {
+      background-color: rgba(var(--finish-toast-warning-rgb), 0.42) !important;
+      border-bottom-color: rgba(var(--finish-toast-warning-rgb), 0.35) !important;
+      color: var(--accent-2) !important;
+    }
+
+    .close { color: var(--accent-2) !important; opacity: 0.7; }
+    .close:hover { opacity: 1; }
+  }
+
+  /* ── Error ── */
+  .finish-toast--error {
+    background-color: rgba(var(--finish-toast-error-rgb), 0.28) !important;
+    border-color: rgba(var(--finish-toast-error-rgb), 0.45) !important;
+    color: var(--status-error) !important;
+    box-shadow:
+      0 8px 32px rgba(var(--finish-toast-error-rgb), 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
+
+    .toast-header {
+      background-color: rgba(var(--finish-toast-error-rgb), 0.42) !important;
+      border-bottom-color: rgba(var(--finish-toast-error-rgb), 0.35) !important;
+      color: var(--status-error) !important;
+    }
+
+    .close { color: var(--status-error) !important; opacity: 0.7; }
+    .close:hover { opacity: 1; }
+  }
+}
