@@ -27,8 +27,7 @@
       "unpin_column": "Unpin column",
       "count": "Count",
       "sum": "Sum",
-      "selected_cells_sum": "Sum",
-      "close_sum_popup": "Hide sum"
+      "selected_cells_sum": "Sum"
     },
     "ru": {
       "pagination_select": "Строк на странице",
@@ -57,8 +56,7 @@
       "unpin_column": "Открепить столбец",
       "count": "Кол-во",
       "sum": "Сумма",
-      "selected_cells_sum": "Сумма",
-      "close_sum_popup": "Скрыть сумму"
+      "selected_cells_sum": "Сумма"
     },
     "es": {
       "pagination_select": "Filas por página",
@@ -87,8 +85,7 @@
       "unpin_column": "Desfijar columna",
       "count": "Cantidad",
       "sum": "Suma",
-      "selected_cells_sum": "Suma",
-      "close_sum_popup": "Ocultar suma"
+      "selected_cells_sum": "Suma"
     }
   }
 </i18n>
@@ -459,7 +456,11 @@
         </InfiniteLoading>
 
         <div
-          v-if="isFooterVisible"
+          v-if="
+            uv.extra.lazyLoad.type === 'pagination' ||
+            statusLine ||
+            showBottomAddButton
+          "
           class="footer"
         >
           <div v-if="selectedCellsSumLabel" class="selected-cells-sum">
@@ -520,29 +521,6 @@
             {{ statusLine }}
           </div>
         </div>
-        <transition name="sum-popup-fade">
-          <div
-            v-if="
-              selectedCellsSumLabel &&
-              !isFooterVisible &&
-              !sumPopupDismissed
-            "
-            class="selected-cells-sum-popup"
-            role="status"
-          >
-            <span class="selected-cells-sum-popup__text">
-              {{ selectedCellsSumLabel }}
-            </span>
-            <button
-              type="button"
-              class="selected-cells-sum-popup__close"
-              :aria-label="$t('close_sum_popup').toString()"
-              @click="dismissSumPopup"
-            >
-              <span class="material-icons">close</span>
-            </button>
-          </div>
-        </transition>
       </template>
     </div>
   </wrapped-component>
@@ -1394,9 +1372,6 @@ export const tableUserViewHandler: IUserViewHandler<
 
     let lazyLoad =
       oldView?.lazyLoad ?? TableLazyLoad.parse(uv.attributes['lazy_load'])
-    if (!oldView && lazyLoad.type === 'pagination') {
-      uv.rowLoadState.perFetch = lazyLoad.pagination.perPage
-    }
     if (hasTree) {
       lazyLoad = {
         type: 'infinite_scroll',
@@ -1708,8 +1683,6 @@ export default class UserViewTable extends mixins<
   columnContextMenu: CellContextMenuData | null = null
   pinnedColumns: Record<number, boolean> = {}
 
-  autoscrollTimer: number | null = null
-  autoscrollForward = true
   customColumnOrder: number[] = []
   draggedColumnIndex: number | null = null
   draggedOverColumnIndex: number | null = null
@@ -2558,25 +2531,6 @@ export default class UserViewTable extends mixins<
     return Number(value.toFixed(12))
   }
 
-  private sumPopupDismissed = false
-
-  @Watch('selectedCellsSumLabel')
-  private onSelectedCellsSumLabelChange() {
-    this.sumPopupDismissed = false
-  }
-
-  private dismissSumPopup() {
-    this.sumPopupDismissed = true
-  }
-
-  private get isFooterVisible(): boolean {
-    return (
-      this.uv.extra.lazyLoad.type === 'pagination' ||
-      Boolean(this.statusLine) ||
-      this.showBottomAddButton
-    )
-  }
-
   private get selectedCellsSumLabel(): string | null {
     if (this.selectedCells.length === 0) return null
 
@@ -3250,13 +3204,10 @@ export default class UserViewTable extends mixins<
     )
     document.removeEventListener('mousemove', this.handleColumnResizeMouseMove)
     document.removeEventListener('mouseup', this.handleColumnResizeMouseUp)
-<<<<<<< HEAD
-=======
     if (this.persistColumnLayoutTimeoutId !== null) {
       clearTimeout(this.persistColumnLayoutTimeoutId)
       this.persistColumnLayoutTimeoutId = null
     }
->>>>>>> remotes/ozma-dev/master
     if (this.autoscrollTimer !== null) {
       clearInterval(this.autoscrollTimer)
     }
@@ -3744,7 +3695,7 @@ export default class UserViewTable extends mixins<
     element: HTMLElement,
     event: MouseEvent,
   ) {
-    if (event.shiftKey || event.ctrlKey || event.metaKey) return
+    if (event.shiftKey || event.ctrlKey) return
 
     const ref = this.getValueRefByVisualPosition(pos)
     this.deselectAllCells()
@@ -3815,27 +3766,13 @@ export default class UserViewTable extends mixins<
     element: HTMLElement,
     event: MouseEvent,
   ) {
-    if (event.ctrlKey || event.metaKey) {
+    if (event.ctrlKey) {
       this.removeCellEditing()
-      const ref = this.getValueRefByVisualPosition(pos)
-      const cell = this.uv.getValueByRef(ref)
-      const isExplicitlySelected = cell?.value.extra.selected === true
-      const isCursor =
-        this.uv.extra.cursorValue !== null &&
-        deepEquals(this.uv.extra.cursorValue, ref)
-
-      if (isExplicitlySelected) {
-        this.selectValue(ref, false)
-      } else if (isCursor) {
-        this.clearCursorCell()
-        this.uv.extra.cursorValue = null
-        this.uv.extra.oldCursorValue = null
-      } else {
-        if (this.uv.extra.cursorValue) {
-          this.selectValue(this.uv.extra.cursorValue, true)
-        }
-        this.setCursorCell(ref)
+      if (this.uv.extra.cursorValue) {
+        this.selectValue(this.uv.extra.cursorValue, true)
       }
+      const ref = this.getValueRefByVisualPosition(pos)
+      this.setCursorCell(ref)
     } else if (event.shiftKey) {
       this.removeCellEditing()
       this.shiftSelectCells(pos)
@@ -4317,72 +4254,6 @@ th.column-drop-target {
 .selected-cells-sum {
   font-size: 0.75rem;
   white-space: nowrap;
-}
-
-.selected-cells-sum-popup {
-  position: sticky;
-  bottom: 0.75rem;
-  left: 0.75rem;
-  z-index: 31;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  align-self: flex-start;
-  margin-top: auto;
-  margin-right: auto;
-  width: fit-content;
-  max-width: calc(100% - 1.5rem);
-  border: 1px solid var(--table-borderColor, rgba(0, 0, 0, 0.12));
-  border-radius: 0.75rem;
-  background-color: var(--default-backgroundColor, #fff);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  white-space: nowrap;
-  pointer-events: auto;
-}
-
-.selected-cells-sum-popup__text {
-  line-height: 1.2;
-}
-
-.selected-cells-sum-popup__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  cursor: pointer;
-  padding: 0.125rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  color: inherit;
-  opacity: 0.6;
-  transition: background-color 0.15s ease, opacity 0.15s ease;
-
-  &:hover,
-  &:focus-visible {
-    background-color: rgba(0, 0, 0, 0.08);
-    opacity: 1;
-    outline: none;
-  }
-
-  .material-icons {
-    font-size: 1rem;
-    line-height: 1;
-  }
-}
-
-.sum-popup-fade-enter-active,
-.sum-popup-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.sum-popup-fade-enter,
-.sum-popup-fade-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
 }
 
 .context-menu-wrapper {

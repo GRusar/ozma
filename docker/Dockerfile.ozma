@@ -4,8 +4,9 @@ WORKDIR /app
 
 COPY . .
 RUN corepack enable
-RUN --mount=type=cache,target=/root/.yarn YARN_NODE_LINKER=node-modules yarn install --immutable
-RUN NODE_OPTIONS=--max-old-space-size=1536 YARN_NODE_LINKER=node-modules yarn build
+# TODO: return --immutable
+RUN --mount=type=cache,target=/root/.yarn YARN_NODE_LINKER=node-modules yarn install # --immutable
+RUN YARN_NODE_LINKER=node-modules yarn build
 
 FROM caddy
 
