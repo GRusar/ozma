@@ -116,6 +116,7 @@
           'stick-fixed-columns': stickFixedColumns,
           'selection-column-enabled': showSelectionColumn,
           'show-vertical-borders': showVerticalBorders,
+          'horizontal-overflow': tableOverflowsWrapper,
         },
       ]"
       :infinite-wrapper="isRoot"
@@ -683,6 +684,20 @@ export interface IVisualPosition {
 
 const showStep = 15
 const doubleClickTime = 700
+
+// Whether pinned headers can follow the page scroll on the compositor (see
+// `--pinned-table` in FormGridBlock.vue); otherwise a scroll listener does it.
+const hasScrollDrivenAnimations =
+  typeof CSS !== 'undefined' && CSS.supports('animation-timeline: view()')
+
+// Nearest ancestor that `position: sticky` descendants resolve against.
+const findScrollContainer = (start: HTMLElement | null): HTMLElement | null => {
+  for (let el = start; el !== null; el = el.parentElement) {
+    const { overflowY } = getComputedStyle(el)
+    if (overflowY === 'auto' || overflowY === 'scroll') return el
+  }
+  return null
+}
 
 export type ITableCombinedUserView = ICombinedUserView<
   ITableValueExtra,
@@ -3146,12 +3161,125 @@ export default class UserViewTable extends mixins<
   private showFixedColumnBorder = false
 
   private stickFixedColumns = true
+  // Whether the table is wider than its wrapper. Lets the wrapper keep its own
+  // horizontal scroll where an ancestor would otherwise drop it (nested views in
+  // forms pin their headers to the page, which needs the wrapper not to scroll).
+  private tableOverflowsWrapper = false
   private tableResizeObserver: ResizeObserver | null = null
+  private observedTable: HTMLElement | null = null
+  // Page scroll container the column headers follow while the wrapper keeps
+  // its own horizontal scroll (`--pinned-headers` in FormGridBlock.vue). Sticky
+  // headers can't reach past a scroll container, so their `top` is set by hand.
+  private pinnedHeaderScroller: HTMLElement | null = null
   private onTableResize() {
     const breakpoint = 1000
     const ref = this.$refs['tableWrapper'] as HTMLElement | undefined
     const tableWidth = ref?.offsetWidth ?? breakpoint
     this.stickFixedColumns = tableWidth > breakpoint
+    const table = this.$refs['table'] as HTMLElement | undefined
+    this.tableOverflowsWrapper =
+      ref !== undefined &&
+      table !== undefined &&
+      table.offsetWidth > ref.clientWidth
+    // After the render that puts `horizontal-overflow` on the wrapper.
+    void this.$nextTick(() => this.updatePinnedHeaders())
+  }
+
+  private updatePinnedHeaders() {
+    /* eslint-disable @typescript-eslint/unbound-method */
+    const wrapper = this.$refs['tableWrapper'] as HTMLElement | undefined
+    const wanted =
+      wrapper !== undefined &&
+      this.tableOverflowsWrapper &&
+      getComputedStyle(wrapper).getPropertyValue('--pinned-headers').trim() ===
+        '1'
+    if (!wanted) {
+      this.stopPinningHeaders()
+      return
+    }
+    this.updatePinnedHeaderRange()
+    if (hasScrollDrivenAnimations) return
+    if (this.pinnedHeaderScroller === null) {
+      const scroller = findScrollContainer(wrapper.parentElement)
+      if (scroller === null) return
+      this.pinnedHeaderScroller = scroller
+      scroller.addEventListener('scroll', this.updatePinnedHeaderOffset, {
+        passive: true,
+      })
+    }
+    this.updatePinnedHeaderOffset()
+    /* eslint-enable @typescript-eslint/unbound-method */
+  }
+
+  // Where inside the wrapper the headers start following the page scroll and
+  // how far they may go: from the table's top to its end minus their height.
+  private updatePinnedHeaderRange() {
+    const wrapper = this.$refs['tableWrapper'] as HTMLElement | undefined
+    const table = this.$refs['table'] as HTMLTableElement | undefined
+    if (!wrapper || !table) return
+    const start = table.getBoundingClientRect().top - wrapper.getBoundingClientRect().top
+    const max = Math.max(0, table.offsetHeight - (table.tHead?.offsetHeight ?? 0))
+    wrapper.style.setProperty('--pinned-header-start', `${start}px`)
+    wrapper.style.setProperty('--pinned-header-end', `${start + max}px`)
+    wrapper.style.setProperty('--pinned-header-max', `${max}px`)
+  }
+
+  private stopPinningHeaders() {
+    /* eslint-disable @typescript-eslint/unbound-method */
+    if (this.pinnedHeaderScroller !== null) {
+      this.pinnedHeaderScroller.removeEventListener(
+        'scroll',
+        this.updatePinnedHeaderOffset,
+      )
+      this.pinnedHeaderScroller = null
+    }
+    const wrapper = this.$refs['tableWrapper'] as HTMLElement | undefined
+    for (const name of ['offset', 'start', 'end', 'max']) {
+      wrapper?.style.removeProperty(`--pinned-header-${name}`)
+    }
+    /* eslint-enable @typescript-eslint/unbound-method */
+  }
+
+  private updatePinnedHeaderOffset() {
+    const wrapper = this.$refs['tableWrapper'] as HTMLElement | undefined
+    const table = this.$refs['table'] as HTMLTableElement | undefined
+    const scroller = this.pinnedHeaderScroller
+    if (!wrapper || !table || scroller === null) return
+    const headerHeight =
+      parseFloat(
+        getComputedStyle(wrapper).getPropertyValue('--nested-header-height'),
+      ) || 0
+    const wrapperTop = wrapper.getBoundingClientRect().top
+    const tableRect = table.getBoundingClientRect()
+    const scrollerTop = scroller.getBoundingClientRect().top
+    const headRowHeight = table.tHead?.offsetHeight ?? 0
+    // The headers stay sticky against the wrapper, so the offset is a sticky
+    // `top` inside it: where the page's sticky line is, clamped to the table.
+    // `- 1` matches the usual `top: -1px` of the headers.
+    const wanted = scrollerTop + headerHeight - 1 - wrapperTop
+    const min = tableRect.top - wrapperTop
+    const max = Math.max(min, min + tableRect.height - headRowHeight)
+    const offset = Math.min(max, Math.max(min, wanted))
+    wrapper.style.setProperty('--pinned-header-offset', `${offset}px`)
+  }
+
+  // The table element comes and goes with the data, and its width follows the
+  // columns, so the observer is (re)attached whenever the component re-renders.
+  private observeTable() {
+    const table = this.$refs['table'] as HTMLElement | undefined
+    const target = table ?? null
+    if (target === this.observedTable || this.tableResizeObserver === null) {
+      return
+    }
+    if (this.observedTable !== null) {
+      this.tableResizeObserver.unobserve(this.observedTable)
+    }
+    this.observedTable = target
+    if (target !== null) this.tableResizeObserver.observe(target)
+  }
+
+  protected updated() {
+    this.observeTable()
   }
 
   protected mounted() {
@@ -3178,6 +3306,7 @@ export default class UserViewTable extends mixins<
         this.tableResizeObserver.observe(
           this.$refs['tableWrapper'] as HTMLElement,
         )
+        this.observeTable()
       } else {
         this.onTableResize()
       }
@@ -3215,11 +3344,8 @@ export default class UserViewTable extends mixins<
     this.rootEvents.forEach(([name, callback]) =>
       this.$root.$off(name, callback),
     )
-    if (this.$refs['tableWrapper']) {
-      this.tableResizeObserver?.unobserve(
-        this.$refs['tableWrapper'] as HTMLElement,
-      )
-    }
+    this.tableResizeObserver?.disconnect()
+    this.stopPinningHeaders()
     /* eslint-enable @typescript-eslint/unbound-method */
 
     if (this.uv.extra.lazyLoad.type === 'pagination' && this.isTopLevel) {

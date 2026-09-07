@@ -243,5 +243,60 @@ export default class FormGridBlock extends Vue {
     z-index: 32;
     background: var(--backgroundColor);
   }
+
+  /* The table's column headers are sticky too, but they resolve against the
+     nearest scroll container, so nothing between them and the page may be one.
+     A table wider than the form has to keep its own horizontal scroll, which
+     makes the wrapper a scroll container again; Table.vue then follows the
+     page scroll by hand and moves the sticky `top` of the headers (a
+     transform would cut their backdrop blur off from the rows). Views with
+     `control_height` scroll inside their box and are left alone. */
+  ::v-deep .nested-userview:not(.fixed-height) {
+    .userview-wrapper,
+    .userview-overlay,
+    .table-wrapper:not(.horizontal-overflow) {
+      overflow: visible;
+    }
+
+    .table-wrapper:not(.horizontal-overflow) th {
+      top: calc(var(--nested-header-height, 0px) - 1px);
+    }
+
+    .table-wrapper.horizontal-overflow {
+      --pinned-headers: 1;
+
+      th {
+        top: var(--pinned-header-offset, -1px);
+      }
+
+      /* Follow the page scroll on the compositor: as the wrapper exits the
+         scrollport (inset by the header panel), the headers move down by the
+         same distance, starting when the table's top reaches the panel and
+         stopping at the table's end. Table.vue sets the three lengths. */
+      @supports (animation-timeline: view()) {
+        view-timeline: --pinned-table block;
+        view-timeline-inset: calc(var(--nested-header-height, 0px) - 1px) auto;
+
+        th {
+          animation: pinned-header linear both;
+          animation-timeline: --pinned-table;
+          /* `exit-crossing`, not `exit`: for a wrapper taller than the
+             scrollport `exit` only starts once its bottom edge is in view. */
+          animation-range: exit-crossing var(--pinned-header-start, 0px)
+            exit-crossing var(--pinned-header-end, 0px);
+        }
+      }
+    }
+  }
+}
+
+@keyframes pinned-header {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(var(--pinned-header-max, 0px));
+  }
 }
 </style>

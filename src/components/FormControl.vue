@@ -263,7 +263,14 @@
         />
       </template>
     </InputSlot>
-    <div v-else :class="['nested-userview', { mobile: $isMobile }]">
+    <div
+      v-else
+      :class="[
+        'nested-userview',
+        { mobile: $isMobile, 'fixed-height': customHeight !== null },
+      ]"
+      :style="nestedUserViewStyle"
+    >
       <div v-if="inputType.name == 'empty_user_view'">
         <div class="nested-menu">
           <!-- `tabindex` is required for closing tooltip on blur -->
@@ -282,6 +289,7 @@
       </div>
       <HeaderPanel
         v-else-if="inputType.name === 'user_view'"
+        ref="headerPanel"
         type="component"
         :title="usedCaption"
         :buttons="buttons"
@@ -639,6 +647,17 @@ export default class FormControl extends Vue {
   private title: UserString | null = null
   private enableFilter = false
   private isUserViewLoading = false
+  // Height of the nested view's header panel, exposed to CSS so that the
+  // table's sticky column headers can pin right below it.
+  private nestedHeaderHeight: number | null = null
+  private headerPanelResizeObserver: ResizeObserver | null = null
+  private observedHeaderPanel: HTMLElement | null = null
+
+  get nestedUserViewStyle(): Record<string, string> {
+    return this.nestedHeaderHeight === null
+      ? {}
+      : { '--nested-header-height': `${this.nestedHeaderHeight}px` }
+  }
   private autoSaveLock: AutoSaveLock | null = null
 
   private argumentEditorProps: IArgumentEditorProps | null = null
@@ -1234,6 +1253,35 @@ export default class FormControl extends Vue {
       const control = this.$refs['control'] as HTMLElement | undefined
       control?.focus?.()
     }
+    this.observeHeaderPanelHeight()
+  }
+
+  // The header panel renders only once the nested view is resolved, which may
+  // happen after mount, so the observer is (re)attached on every update.
+  protected updated() {
+    this.observeHeaderPanelHeight()
+  }
+
+  private observeHeaderPanelHeight() {
+    const panel = (this.$refs['headerPanel'] as Vue | undefined)?.$el
+    const target = panel instanceof HTMLElement ? panel : null
+    if (target === this.observedHeaderPanel) return
+
+    this.headerPanelResizeObserver?.disconnect()
+    this.headerPanelResizeObserver = null
+    this.observedHeaderPanel = target
+    if (target === null) {
+      this.nestedHeaderHeight = null
+      return
+    }
+    if (typeof ResizeObserver === 'undefined') {
+      this.nestedHeaderHeight = target.offsetHeight
+      return
+    }
+    this.headerPanelResizeObserver = new ResizeObserver(() => {
+      this.nestedHeaderHeight = target.offsetHeight
+    })
+    this.headerPanelResizeObserver.observe(target)
   }
 
   private updateValue(newValue: unknown) {
@@ -1272,6 +1320,7 @@ export default class FormControl extends Vue {
   }
 
   protected beforeDestroy() {
+    this.headerPanelResizeObserver?.disconnect()
     this.removeAutoSaveLockFormControl()
     this.$emit('blur')
   }
