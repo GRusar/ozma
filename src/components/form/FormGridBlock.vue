@@ -250,7 +250,8 @@ export default class FormGridBlock extends Vue {
      makes the wrapper a scroll container again; Table.vue then follows the
      page scroll by hand and moves the sticky `top` of the headers (a
      transform would cut their backdrop blur off from the rows). Views with
-     `control_height` scroll inside their box and are left alone. */
+     `control_height` whose content overflows the box scroll inside it and
+     are left alone. */
   ::v-deep .nested-userview:not(.fixed-height) {
     .userview-wrapper,
     .userview-overlay,
