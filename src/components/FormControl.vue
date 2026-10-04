@@ -143,6 +143,7 @@
           :label="usedCaption"
           :options-view="inputType.optionsView"
           :reference-entity="inputType.entity"
+          :link-attr="inputType.linkAttr"
           :height="customHeight"
           :autofocus="autofocus || iSlot.autofocus"
           :required="!isNullable"
@@ -267,7 +268,10 @@
       v-else
       :class="[
         'nested-userview',
-        { mobile: $isMobile, 'fixed-height': customHeight !== null },
+        {
+          mobile: $isMobile,
+          'fixed-height': customHeight !== null && !nestedContentFits,
+        },
       ]"
       :style="nestedUserViewStyle"
     >
@@ -304,6 +308,7 @@
       />
       <div
         v-if="inputType.name === 'user_view'"
+        ref="nestedBox"
         :style="{ backgroundColor: cellColor, height: `${customHeight}px` }"
       >
         <NestedUserView
@@ -429,6 +434,7 @@ interface IArrayReferenceFieldType {
   name: 'array_select'
   optionsView: IQuery | null
   entity: IEntityRef
+  linkAttr?: unknown
 }
 
 interface IReferenceType {
@@ -652,6 +658,11 @@ export default class FormControl extends Vue {
   private nestedHeaderHeight: number | null = null
   private headerPanelResizeObserver: ResizeObserver | null = null
   private observedHeaderPanel: HTMLElement | null = null
+  // A view with `control_height` that fits its box has nothing to scroll in
+  // it, so it pins its headers to the page like any full-width view.
+  private nestedContentFits = false
+  private nestedBoxResizeObserver: ResizeObserver | null = null
+  private observedNestedBoxTargets: HTMLElement[] = []
 
   get nestedUserViewStyle(): Record<string, string> {
     return this.nestedHeaderHeight === null
@@ -1031,6 +1042,8 @@ export default class FormControl extends Vue {
                 name: 'array_select',
                 optionsView,
                 entity: this.fieldType.subtype.entity,
+                // Ссылка на каждый элемент – как у одиночной ссылки: стрелка у чипа.
+                linkAttr: this.attributes['link'],
               }
             }
             case 'enum': {
@@ -1254,12 +1267,51 @@ export default class FormControl extends Vue {
       control?.focus?.()
     }
     this.observeHeaderPanelHeight()
+    this.observeNestedBox()
   }
 
   // The header panel renders only once the nested view is resolved, which may
   // happen after mount, so the observer is (re)attached on every update.
   protected updated() {
     this.observeHeaderPanelHeight()
+    this.observeNestedBox()
+  }
+
+  private observeNestedBox() {
+    const box =
+      this.customHeight === null
+        ? null
+        : ((this.$refs['nestedBox'] as HTMLElement | undefined) ?? null)
+    const wrapper = box?.firstElementChild ?? null
+    const overlay = box?.querySelector('.userview-overlay') ?? null
+    // The view's root inside the overlay grows with its content whether the
+    // box scrolls or not; the overlay notices the root being swapped on reload.
+    const targets = [box, overlay, overlay?.firstElementChild].filter(
+      (el): el is HTMLElement => el instanceof HTMLElement,
+    )
+    const observed = this.observedNestedBoxTargets
+    const sameTargets =
+      targets.length === observed.length &&
+      targets.every((el, i) => el === observed[i])
+    if (!sameTargets) {
+      this.nestedBoxResizeObserver?.disconnect()
+      this.observedNestedBoxTargets = targets
+      if (targets.length > 0 && typeof ResizeObserver !== 'undefined') {
+        this.nestedBoxResizeObserver ??= new ResizeObserver(() =>
+          this.observeNestedBox(),
+        )
+        const resizeObserver = this.nestedBoxResizeObserver
+        targets.forEach((el) => resizeObserver.observe(el))
+      }
+    }
+
+    // While the box is fixed, the wrapper or the overlay scrolls; once it's
+    // not, the content overflows the box and the wrapper visibly.
+    this.nestedContentFits =
+      box !== null &&
+      ![box, wrapper, overlay].some(
+        (el) => el instanceof HTMLElement && el.scrollHeight - el.clientHeight > 1,
+      )
   }
 
   private observeHeaderPanelHeight() {
@@ -1321,6 +1373,7 @@ export default class FormControl extends Vue {
 
   protected beforeDestroy() {
     this.headerPanelResizeObserver?.disconnect()
+    this.nestedBoxResizeObserver?.disconnect()
     this.removeAutoSaveLockFormControl()
     this.$emit('blur')
   }
