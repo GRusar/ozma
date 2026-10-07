@@ -1419,6 +1419,19 @@ export default class FormControl extends Vue {
   border-radius: 0.5rem;
   overflow: hidden;
 
+  /* With `control_height` the view scrolls inside its box, in the overlay of
+     the nested UserView. The table wrapper's `overflow-x: auto` would make it
+     a scroll container too, so the sticky column headers would pin to it and
+     scroll away; the overlay scrolls sideways instead. */
+  &.fixed-height
+    ::v-deep
+    > div
+    > .userview-wrapper
+    > .userview-overlay
+    > .table-wrapper {
+    overflow: visible;
+  }
+
   &:not(.mobile):not(:hover) ::v-deep {
     .header-panel .button-element,
     .button-container,
